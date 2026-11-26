@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EB I · Painel das aulas práticas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-kicker">Engenharia de Bioprocessos I</span>
+    <h1>Painel das aulas práticas</h1>
+  </div>
+  <div class="loadbox">
+    <button id="btn-refresh" class="btn-primary" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Atualizar dados</span>
+    </button>
+    <div id="status" class="status" role="status" aria-live="polite">Sem dados carregados.</div>
+    <a id="sheet-link" class="sheet-link" target="_blank" rel="noopener">abrir planilha ↗</a>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Seções">
+  <button role="tab" data-tab="bio" aria-selected="true">Biorreator</button>
+  <button role="tab" data-tab="cin" aria-selected="false">Cinética · estatística</button>
+  <button role="tab" data-tab="fes" aria-selected="false">FES · estatística</button>
+  <button role="tab" data-tab="met" aria-selected="false">Metodologia</button>
+  <button role="tab" data-tab="dados" aria-selected="false">Dados</button>
+</nav>
+
+<div id="warnings" class="warnings" hidden></div>
+
+<main>
+  <!-- ============ BIORREATOR ============ -->
+  <section id="tab-bio" class="tab-panel" role="tabpanel">
+    <div class="filters">
+      <label class="chk"><input type="checkbox" id="bio-logx"> X em escala log</label>
+      <label class="chk"><input type="checkbox" id="bio-exp" checked> Sombrear fase exponencial</label>
+      <label class="field">Limite de DO (% sat.)
+        <input type="number" id="bio-docrit" min="0" max="100" step="1" placeholder="ex.: 20">
+      </label>
+      <span class="hint">Passe o mouse para ler todas as variáveis no mesmo instante · clique num ponto de qO₂ para abrir o pulso</span>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Séries temporais do biorreator</h2><p>LB + 0,5 g/L glicose · 1,5 L · 37 °C. Um painel por variável, todos no mesmo eixo de tempo.</p></div>
+      <div id="chart-bio" class="chart chart-tall"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Pulso de interrupção da aeração</h2>
+        <p>Queda do OD durante o desligamento do ar. Pontos cheios: janela linear usada no cálculo da OUR.</p>
+      </div>
+      <div class="filters inner">
+        <label class="field">Pulso <select id="pulse-sel"></select></label>
+        <span id="pulse-info" class="mono small"></span>
+      </div>
+      <div id="chart-pulse" class="chart chart-mid"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>Crescimento: biorreator × Erlenmeyers</h2><p>Concentração celular calculada (X = 0,36·OD₆₀₀) ao longo do tempo.</p></div>
+      <div class="filters inner">
+        <div class="chips" id="cmp-groups" aria-label="Grupos"></div>
+      </div>
+      <div class="filters inner">
+        <div class="seg" id="cmp-mode" role="radiogroup" aria-label="Modo">
+          <button data-v="mean" aria-pressed="true">Média ± DP</button>
+          <button data-v="flask" aria-pressed="false">Frascos</button>
+        </div>
+        <div class="seg" id="cmp-norm" role="radiogroup" aria-label="Normalização">
+          <button data-v="x" aria-pressed="true">X (g/L)</button>
+          <button data-v="ratio" aria-pressed="false">X / X₀</button>
+        </div>
+        <div class="seg" id="cmp-scale" role="radiogroup" aria-label="Escala">
+          <button data-v="linear" aria-pressed="true">Linear</button>
+          <button data-v="log" aria-pressed="false">Log</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="cmp-desc" checked> Mostrar descartados</label>
+        <label class="chk"><input type="checkbox" id="cmp-excl" checked> Excluir descartados da média</label>
+      </div>
+      <div id="chart-cmp" class="chart chart-mid"></div>
+      <p class="foot">Marcador vazado = ponto descartado (motivo no tooltip). Marcador com borda grossa = ponto da fase exponencial usado no ajuste. Na escala log, a fase exponencial aparece como reta.</p>
+    </div>
+  </section>
+
+  <!-- ============ CINÉTICA ============ -->
+  <section id="tab-cin" class="tab-panel" role="tabpanel" hidden>
+    <div class="filters">
+      <div class="seg" id="cin-metric" role="radiogroup" aria-label="Métrica">
+        <button data-v="mu_min" aria-pressed="true">μ<sub>max</sub></button>
+        <button data-v="tg_min" aria-pressed="false">t<sub>g</sub></button>
+      </div>
+      <div class="seg" id="cin-unit" role="radiogroup" aria-label="Unidade de μ">
+        <button data-v="min" aria-pressed="true">min⁻¹</button>
+        <button data-v="h" aria-pressed="false">h⁻¹</button>
+      </div>
+      <label class="chk"><input type="checkbox" id="cin-bio" checked> Biorreator como referência</label>
+    </div>
+    <div class="stat-layout" id="stat-cin"></div>
+  </section>
+
+  <!-- ============ FES ============ -->
+  <section id="tab-fes" class="tab-panel" role="tabpanel" hidden>
+    <div class="filters">
+      <div class="seg" id="fes-metric" role="radiogroup" aria-label="Métrica">
+        <button data-v="AA" aria-pressed="true">Atividade amilolítica</button>
+        <button data-v="proteina" aria-pressed="false">Proteína</button>
+        <button data-v="AE" aria-pressed="false">Atividade específica</button>
+      </div>
+    </div>
+    <div class="stat-layout" id="stat-fes"></div>
+  </section>
+
+  <!-- ============ METODOLOGIA ============ -->
+  <section id="tab-met" class="tab-panel prose" role="tabpanel" hidden>
+    <article>
+      <h2>Sobre este painel</h2>
+      <p>Este painel é uma ferramenta de <strong>exploração</strong> dos dados das duas aulas práticas de Engenharia de Bioprocessos I, para apoiar a discussão dos resultados. Ele não guarda dados: tudo é lido da planilha <code>dados_labs_eb1</code> no Google Sheets quando se clica em <em>Atualizar dados</em>. As figuras finais dos relatórios continuam sendo geradas nos notebooks do Colab.</p>
+
+      <h3>Fluxo dos dados</h3>
+      <ol class="flow">
+        <li><strong>Entrada.</strong> Leituras brutas de cada equipe nas abas <code>fes_ensaios</code> (DNS e Bradford, um valor por frasco), <code>cin-bac_crescimento</code> (OD₆₀₀ por frasco e coleta, e o registro do biorreator) e <code>cin-bac_OUR</code> (OD durante cada pulso de interrupção do ar).</li>
+        <li><strong>Cálculo.</strong> As abas de dashboard (<code>fes_dashboard</code>, <code>cin_dashboard</code>) e <code>parametros</code> concentram curvas-padrão, constantes e as estatísticas.</li>
+        <li><strong>Saída.</strong> As abas <code>para_figura_*</code> alimentam o Colab. As abas <code>para_html_*</code> alimentam este painel, em formato longo (uma linha por observação) e geradas por fórmula, então acompanham qualquer edição nas abas de origem.</li>
+        <li><strong>Leitura.</strong> O painel consulta as abas <code>para_html_*</code> pela interface pública de consulta do Google Sheets (<code>gviz</code>), sem chave e sem cópia dos dados no repositório.</li>
+      </ol>
+
+      <h2>Experimento 1 · Fermentação em estado sólido (FES)</h2>
+      <p><em>Rhizopus microsporus</em> var. <em>oligosporus</em> cultivado por 168 h a 30 °C em misturas de farinha de trigo integral, bagaço de cana e farinha de soja (10 g por frasco, 55 % de umidade), com três frascos por equipe. Cada equipe usa uma composição; a equipe 3 compara seus resultados com os da equipe 6.</p>
+      <div class="eq-grid">
+        <div class="eq"><span class="eq-name">Atividade amilolítica</span><span class="eq-body">AA (U/g) = C<sub>glicose</sub> · V<sub>e</sub> · DF / (t<sub>r</sub> · m)</span><span class="eq-note">C<sub>glicose</sub> pela curva de glicose (DNS, 540 nm); 1 U libera 1 µmol de glicose por minuto.</span></div>
+        <div class="eq"><span class="eq-name">Proteína total</span><span class="eq-body">P (mg/g) = C<sub>p</sub> · V<sub>e</sub> · 1000 / m</span><span class="eq-note">C<sub>p</sub> (g/L) pela curva de BSA (Bradford), multiplicada pela diluição.</span></div>
+        <div class="eq"><span class="eq-name">Atividade específica</span><span class="eq-body">AE (U/mg) = AA / P</span><span class="eq-note">Só é calculada quando a proteína do mesmo frasco está acima do limite de quantificação.</span></div>
+      </div>
+      <p><strong>Limite de quantificação da proteína.</strong> Absorbâncias abaixo do menor padrão de BSA correspondem a uma extrapolação da curva. Esses frascos aparecem como <em>abaixo do LQ</em>: são desenhados sobre a linha do LQ com marcador vazado e ficam fora da média e do teste t. Consequência: a AE desses frascos não é calculável.</p>
+
+      <h2>Experimento 2 · Cinética de crescimento bacteriano</h2>
+      <p><em>Escherichia coli</em> BL21 (pTrc-HisA-ABF) em LB Lennox. Nos Erlenmeyers de 250 mL, cada equipe testa uma variação de meio ou de volume, com três frascos e coletas a cada 30 min por 210 min. Em paralelo, um biorreator de bancada (1,5 L, 37 °C) é amostrado ao longo do cultivo, com ajustes de agitação e de vazão de ar para evitar limitação por oxigênio.</p>
+      <div class="eq-grid">
+        <div class="eq"><span class="eq-name">Concentração celular</span><span class="eq-body">X (g/L) = 0,36 · OD₆₀₀ · diluição</span><span class="eq-note">Fator de conversão para massa seca (Ren et al., 2013).</span></div>
+        <div class="eq"><span class="eq-name">Velocidade específica máxima</span><span class="eq-body">ln X = ln X₀ + μ<sub>max</sub> · t</span><span class="eq-note">Inclinação da regressão linear de ln X sobre t, só com os pontos marcados como fase exponencial em cada frasco.</span></div>
+        <div class="eq"><span class="eq-name">Tempo de geração</span><span class="eq-body">t<sub>g</sub> = ln 2 / μ<sub>max</sub></span><span class="eq-note">Calculado por frasco; a média e o DP são feitos sobre os t<sub>g</sub> individuais.</span></div>
+        <div class="eq"><span class="eq-name">Consumo de O₂</span><span class="eq-body">OUR = −dC<sub>O₂</sub>/dt &nbsp;·&nbsp; q<sub>O₂</sub> = OUR / X</span><span class="eq-note">Inclinação da queda do OD (mg/L) com o ar desligado, na janela em que a inclinação local é constante; C<sub>sat</sub> a 37 °C da aba <code>parametros</code>.</span></div>
+      </div>
+      <p><strong>Escolha da fase exponencial e descartes.</strong> As caixas <em>Exp?</em> e <em>Linear</em> da planilha definem quais pontos entram em cada ajuste. Pontos inconsistentes são marcados como descartados com o motivo registrado. Para as equipes 3 e 6, isso é feito em <code>para_figura_cin_curvas</code>. Para as demais, na aba <code>para_html_descartes</code> (equipe, frasco, coleta, descartado, motivo). Os descartes alteram o desenho e a média por tempo neste painel; o μ<sub>max</sub> depende apenas das caixas de fase exponencial.</p>
+      <p><strong>Biorreator.</strong> Há um único cultivo, então o μ<sub>max</sub> vem de um único ajuste. A incerteza mostrada é o erro-padrão da inclinação, e ele aparece como linha de referência, sem teste estatístico.</p>
+
+      <h2>Análise estatística</h2>
+      <ul>
+        <li><strong>Teste.</strong> Teste t para amostras independentes, bicaudal, com variâncias iguais (Student), como pede o roteiro. O teste de Welch, que não supõe variâncias iguais, é calculado como verificação e pode ser escolhido no painel.</li>
+        <li><strong>Unidade amostral.</strong> O frasco (n = 3 por equipe). Média ± DP, EP ou IC 95 % (t de Student com n − 1 graus de liberdade).</li>
+        <li><strong>Condição mínima.</strong> n ≥ 2 em cada grupo; abaixo disso o teste não é feito.</li>
+        <li><strong>Nível de significância.</strong> α definido na aba <code>parametros</code>. Legenda: * p &lt; 0,05 · ** p &lt; 0,01 · *** p &lt; 0,001 · n.s. não significativo.</li>
+        <li><strong>Comparações múltiplas.</strong> O painel calcula o teste para qualquer par de equipes, mas cada p é de um teste isolado, sem correção. Ao olhar muitos pares, a chance de um falso positivo cresce. Por isso, a comparação planejada do relatório (3 × 6) é a que tem valor inferencial; os demais pares servem como exploração.</li>
+        <li><strong>Curvas.</strong> Não se compara curva ponto a ponto com teste t (as observações ao longo do tempo são dependentes). A comparação estatística é feita só entre μ<sub>max</sub> e t<sub>g</sub>.</li>
+      </ul>
+
+      <h2>Pendências registradas na planilha</h2>
+      <ul>
+        <li>Tempo de reação do DNS: o protocolo incuba 10 min, mas a equação cita 5 min (a planilha usa o valor da aba <code>parametros</code>).</li>
+        <li>Diluição do extrato no Bradford: a confirmar.</li>
+        <li>Condições experimentais das equipes 1, 2, 4 e 5: preencher a coluna <code>condicao</code> em <code>para_html_grupos</code> para que apareçam nos rótulos.</li>
+      </ul>
+
+      <h3>Parâmetros em vigor na planilha</h3>
+      <div id="met-params" class="table-wrap"></div>
+    </article>
+  </section>
+
+  <!-- ============ DADOS ============ -->
+  <section id="tab-dados" class="tab-panel" role="tabpanel" hidden>
+    <div class="filters">
+      <label class="field">Aba <select id="data-sel"></select></label>
+      <button id="data-csv" class="btn-ghost" type="button">Baixar CSV</button>
+      <span id="data-info" class="hint"></span>
+    </div>
+    <div class="card"><div id="data-table" class="table-wrap tall"></div></div>
+  </section>
+</main>
+
+<footer class="pagefoot">Dados lidos ao vivo da planilha <code>dados_labs_eb1</code> · gráficos com Plotly.js</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
