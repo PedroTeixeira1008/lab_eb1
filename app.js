@@ -52,7 +52,7 @@ const S = {
   err: 'sd', points: true, test: 'student',
   statGroups: { cinetica: null, fes: null },   // null = todos com dados
   pairs: {},                                    // 'cinetica|mu_min' -> Set('3-6', ...)
-  dataSel: 'curvas',
+  dataSel: 'curvas', dualL: 'X_g_L', dualR: 'pH',
 };
 
 /* ======================================================================
@@ -379,6 +379,48 @@ function renderBio() {
       }
     });
   });
+}
+
+const BIOVARS = {
+  X_g_L: { lab: 'X (g/L)', ht: '%{y:.3f} g/L' },
+  DO_pct: { lab: 'OD (% sat.)', ht: '%{y:.1f} % sat.' },
+  pH: { lab: 'pH', ht: '%{y:.2f}' },
+  qO2_mmol_g_h: { lab: 'qO₂ (mmol g⁻¹ h⁻¹)', ht: '%{y:.2f} mmol g⁻¹ h⁻¹', xkey: 'tempo_pulso_min', markers: true },
+  OUR_mg_L_s: { lab: 'OUR (mg L⁻¹ s⁻¹)', ht: '%{y:.4f} mg L⁻¹ s⁻¹', xkey: 'tempo_pulso_min', markers: true },
+  temp_C: { lab: 'Temperatura (°C)', ht: '%{y:.1f} °C' },
+  rpm: { lab: 'Agitação (rpm)', ht: '%{y:.0f} rpm', shape: 'hv' },
+  ar_L_min: { lab: 'Vazão de ar (L/min)', ht: '%{y:.1f} L/min', shape: 'hv' },
+};
+function renderDual() {
+  const L = $('#dual-left'), R = $('#dual-right');
+  if (!L.options.length) {
+    const opts = () => Object.entries(BIOVARS).map(([k, v]) => el('option', { value: k, text: v.lab }));
+    L.replaceChildren(...opts()); R.replaceChildren(...opts());
+    L.addEventListener('change', () => { S.dualL = L.value; renderDual(); writeHash(); });
+    R.addEventListener('change', () => { S.dualR = R.value; renderDual(); writeHash(); });
+  }
+  L.value = S.dualL; R.value = S.dualR;
+  const rows = (S.data?.bio || []).slice().sort((a, b) => a.tempo_min - b.tempo_min);
+  if (!rows.length) { emptyChart('chart-dual', 'Clique em “Atualizar dados”.'); return; }
+  const mk = (key, side, color) => {
+    const v = BIOVARS[key], pts = rows.filter((r) => r[key] != null && r[v.xkey || 'tempo_min'] != null);
+    return { type: 'scatter', mode: v.markers ? 'markers' : 'lines+markers', name: v.lab, yaxis: side === 'L' ? 'y' : 'y2',
+      x: pts.map((r) => r[v.xkey || 'tempo_min']), y: pts.map((r) => r[key]),
+      line: { color, width: 2, shape: v.shape || 'linear', dash: side === 'R' ? 'dash' : 'solid' },
+      marker: { color, size: v.markers ? 10 : 8, symbol: side === 'L' ? 'circle' : 'square', line: { color: '#fff', width: 1 } },
+      hovertemplate: v.ht };
+  };
+  const cL = '#0072B2', cR = '#D55E00';
+  const layout = BASE_LAYOUT();
+  layout.hovermode = 'x unified';
+  layout.margin.r = 80;
+  layout.xaxis = AX({ title: { text: 'Tempo de cultivo (min)' }, showspikes: true, spikemode: 'across', spikethickness: 1, spikedash: 'dot', spikecolor: INK3 });
+  layout.yaxis = AX({ title: { text: BIOVARS[S.dualL].lab, font: { color: cL } }, tickfont: { color: cL }, type: S.dualL === 'X_g_L' && S.bioLogX ? 'log' : 'linear', ...(S.dualL === 'X_g_L' && S.bioLogX ? LOGTICKS : {}) });
+  layout.yaxis2 = AX({ title: { text: BIOVARS[S.dualR].lab, font: { color: cR } }, tickfont: { color: cR }, overlaying: 'y', side: 'right', showgrid: false, type: S.dualR === 'X_g_L' && S.bioLogX ? 'log' : 'linear', ...(S.dualR === 'X_g_L' && S.bioLogX ? LOGTICKS : {}) });
+  layout.shapes = [];
+  const exp = rows.filter((r) => r.fase_exp);
+  if (S.bioExp && exp.length >= 2) layout.shapes.push({ type: 'rect', xref: 'x', yref: 'paper', x0: Math.min(...exp.map((r) => r.tempo_min)), x1: Math.max(...exp.map((r) => r.tempo_min)), y0: 0, y1: 1, fillcolor: ACCENT, opacity: 0.06, line: { width: 0 }, layer: 'below' });
+  plot('chart-dual', [mk(S.dualL, 'L', cL), mk(S.dualR, 'R', cR)], layout);
 }
 
 function renderPulse() {
@@ -836,7 +878,7 @@ function buildStaticControls() { buildCmpChips(); syncSegs(); }
 function renderTab() {
   document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === S.tab)));
   document.querySelectorAll('.tab-panel').forEach((p) => { p.hidden = p.id !== `tab-${S.tab}`; });
-  if (S.tab === 'bio') { renderBio(); renderPulse(); buildCmpChips(); renderCmp(); }
+  if (S.tab === 'bio') { renderBio(); renderDual(); renderPulse(); buildCmpChips(); renderCmp(); }
   else if (S.tab === 'cin') renderStat('cinetica');
   else if (S.tab === 'fes') renderStat('fes');
   else if (S.tab === 'met') renderMet();
@@ -854,8 +896,8 @@ function wireControls() {
       S[key] = b.dataset.v; syncSegs(); renderTab(); writeHash();
     });
   }
-  $('#bio-logx').addEventListener('change', (e) => { S.bioLogX = e.target.checked; renderBio(); writeHash(); });
-  $('#bio-exp').addEventListener('change', (e) => { S.bioExp = e.target.checked; renderBio(); writeHash(); });
+  $('#bio-logx').addEventListener('change', (e) => { S.bioLogX = e.target.checked; renderBio(); renderDual(); writeHash(); });
+  $('#bio-exp').addEventListener('change', (e) => { S.bioExp = e.target.checked; renderBio(); renderDual(); writeHash(); });
   $('#bio-docrit').addEventListener('input', (e) => { const v = num(e.target.value); S.doCrit = v; renderBio(); writeHash(); });
   $('#pulse-sel').addEventListener('change', (e) => { S.pulse = Number(e.target.value); renderPulse(); writeHash(); });
   $('#cmp-desc').addEventListener('change', (e) => { S.cmpDesc = e.target.checked; renderCmp(); writeHash(); });
@@ -880,7 +922,7 @@ function writeHash() {
   if (!S.cinBio) p.set('bio', '0');
   if (!S.cmpDesc) p.set('desc', '0');
   if (!S.cmpExcl) p.set('excl', '0');
-  p.set('pulso', String(S.pulse));
+  p.set('pulso', String(S.pulse)); p.set('dl', S.dualL); p.set('dr', S.dualR);
   for (const [k, set] of Object.entries(S.pairs)) p.set(`p_${k.replace('|', '_')}`, [...set].join(','));
   for (const [exp, set] of Object.entries(S.statGroups)) if (set) p.set(`eq_${exp}`, [...set].join(','));
   lastHash = '#' + p.toString();
@@ -907,6 +949,8 @@ function readHash() {
   S.cinBio = p.get('bio') !== '0';
   S.cmpDesc = p.get('desc') !== '0';
   S.cmpExcl = p.get('excl') !== '0';
+  if (p.has('dl') && BIOVARS[p.get('dl')]) S.dualL = p.get('dl');
+  if (p.has('dr') && BIOVARS[p.get('dr')]) S.dualR = p.get('dr');
   if (p.has('pulso')) S.pulse = Number(p.get('pulso')) || 1;
   for (const [k, v] of p.entries()) {
     if (k.startsWith('p_')) {

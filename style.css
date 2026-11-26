@@ -195,3 +195,5 @@ table.data td.num { text-align: right; }
   .prose article { padding: 20px; }
   .chart-tall { height: 1000px; }
 }
+
+.sw-inline { display:inline-block; width:14px; height:3px; border-radius:2px; }
